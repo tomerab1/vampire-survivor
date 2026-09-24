@@ -4,7 +4,7 @@ A Vampire-Survivors-style horde game in Rust + [Bevy 0.19](https://bevyengine.or
 Fight through three maps (The Crypt, Frozen Catacombs, Hellforge), level up and pick your build. Each map's boss
 arrives at 4:00, and killing it opens a portal to the next, harder map. Beat the Demon Lord to win.
 
-**Play in the browser:** https://tomerab1.github.io/zombie-survivor/
+**Play in the browser:** https://tomerab1.github.io/vampire-survivor/
 
 The horde is run by a **Horde Director**. Every two seconds it snapshots the fight and asks
 [Jev](https://typesafe.ai) (TypeSafe's System One API) a batch of typed questions:
