@@ -1,0 +1,6 @@
+target/
+web/dist/
+*.png.tmp
+verify-out/
+.aislop/
+**/.aislop/

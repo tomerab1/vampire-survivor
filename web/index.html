@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zombie Survivor — Jev Horde</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #121412; overflow: hidden; }
+    #game { display: block; width: 100%; height: 100%; outline: none; }
+    #loading { position: fixed; inset: 0; display: grid; place-items: center; color: #e9e4da;
+               font: 600 18px/1.4 system-ui, sans-serif; letter-spacing: .08em; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="loading">LOADING THE HORDE…</div>
+  <canvas id="game" tabindex="0"></canvas>
+  <script type="module">
+    import init from "./zombie-survivor.js";
+    const canvas = document.getElementById("game");
+    canvas.focus();
+    canvas.addEventListener("pointerdown", () => canvas.focus());
+    init().catch((e) => {
+      // wasm-bindgen uses an exception to hand control to winit's event loop.
+      if (!String(e).includes("Using exceptions for control flow")) throw e;
+    }).finally(() => document.getElementById("loading").remove());
+  </script>
+</body>
+</html>

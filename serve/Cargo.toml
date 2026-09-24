@@ -1,0 +1,10 @@
+[package]
+name = "serve"
+version = "0.1.0"
+edition = "2024"
+description = "Static host for the web build plus a server-side Jev proxy that keeps TYPESAFE_API_KEY out of the browser"
+
+[dependencies]
+tiny_http = "0.12"
+ureq = "2"
+serde_json = "1"
