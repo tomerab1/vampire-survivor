@@ -1,0 +1,4 @@
+swing_*, bow_*, hit_*, kill_*, magic_*, zap_*, slam_*, bomb_*, chest_*, boss_*, ambience_cave:
+"Free Fantasy 200 SFX Pack" by TomMusic — https://tommusic.itch.io/free-fantasy-200-sfx-pack
+Royalty-free; commercial use allowed; credit appreciated (not required); not for resale/redistribution as an asset.
+Trimmed (stream copy).
