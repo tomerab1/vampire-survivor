@@ -14,6 +14,28 @@
 <body>
   <div id="loading">LOADING THE HORDE…</div>
   <canvas id="game" tabindex="0"></canvas>
+  <script>
+    // Browsers start an AudioContext created before any user gesture in the "suspended" state,
+    // and Bevy creates its context at startup. Track every context and resume them on the
+    // first click / key / touch so sound works on fresh origins (e.g. GitHub Pages).
+    (() => {
+      const Base = window.AudioContext || window.webkitAudioContext;
+      if (!Base) return;
+      const contexts = (window.__audioContexts = []);
+      class TrackedAudioContext extends Base {
+        constructor(...args) {
+          super(...args);
+          contexts.push(this);
+        }
+      }
+      window.AudioContext = TrackedAudioContext;
+      window.webkitAudioContext = TrackedAudioContext;
+      const resume = () => contexts.forEach((c) => c.state !== "running" && c.resume());
+      for (const type of ["pointerdown", "keydown", "touchstart"]) {
+        document.addEventListener(type, resume, { capture: true });
+      }
+    })();
+  </script>
   <script type="module">
     import init from "./zombie-survivor.js";
     const canvas = document.getElementById("game");
