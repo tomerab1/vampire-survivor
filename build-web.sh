@@ -12,5 +12,5 @@ if command -v wasm-opt >/dev/null; then
     -o web/dist/zombie-survivor_bg.wasm web/dist/zombie-survivor_bg.wasm
 fi
 cp web/index.html web/dist/
-cp -R assets web/dist/assets
+rsync -a --exclude ".aislop" --exclude ".DS_Store" assets/ web/dist/assets/
 du -sh web/dist/zombie-survivor_bg.wasm
