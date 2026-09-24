@@ -5,6 +5,8 @@ use bevy::window::PrimaryWindow;
 
 use crate::anim::{Animated, Motion, YSort};
 use crate::assets::GameAssets;
+use crate::blink::Blink;
+use crate::stage::Portal;
 use crate::config::*;
 use crate::launch::LaunchOptions;
 use crate::pickups::Gem;
@@ -276,6 +278,7 @@ fn spawn_player(mut commands: Commands, assets: Res<GameAssets>, selected: Res<S
         Loadout { weapons, passives: Vec::new() },
         stats_for(def, &Loadout::default()),
         Intent { facing: Vec2::X, ..default() },
+        Blink::default(),
         Motion::default(),
         YSort { feet: FEET },
         Animated::idle_run(
@@ -355,6 +358,7 @@ fn bot_intent(
     grid: Res<EnemyGrid>,
     obstacles: Res<Obstacles>,
     gems: Query<&Transform, (With<Gem>, Without<Player>)>,
+    portal: Query<&Transform, (With<Portal>, Without<Player>)>,
     player: Single<(&Transform, &mut Intent, &Health), With<Player>>,
 ) {
     const THREAT_RADIUS: f32 = 260.0;
@@ -380,6 +384,10 @@ fn bot_intent(
     } else {
         gem_pull
     };
+    // An open portal beats everything: head straight for the next stage.
+    if let Some(p) = portal.iter().next() {
+        dir = (p.translation.truncate() - pos).normalize_or_zero() * 2.0 + dir * 0.3;
+    }
     let edge = (pos / ARENA_HALF).length().powi(4);
     dir -= pos.normalize_or_zero() * edge * CENTER_PULL;
     dir += obstacles.avoidance(pos, dir.normalize_or_zero(), LOOK_AHEAD) * 2.0;

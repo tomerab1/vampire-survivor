@@ -1,7 +1,8 @@
 # Zombie Survivor — Jev Horde
 
 A Vampire-Survivors-style horde game in Rust + [Bevy 0.19](https://bevyengine.org), native and WebAssembly.
-Survive 15 minutes against an undead horde, level up, and pick your build. Bosses arrive at 5:00 and 10:00.
+Fight through three maps (The Crypt, Frozen Catacombs, Hellforge), level up and pick your build. Each map's boss
+arrives at 4:00, and killing it opens a portal to the next, harder map. Beat the Demon Lord to win.
 
 **Play in the browser:** https://tomerab1.github.io/zombie-survivor/
 
@@ -14,6 +15,7 @@ The horde is run by a **Horde Director**. Every two seconds it snapshots the fig
 | `pressure` | score 0–3 | spawn pacing |
 | `enrage` | noul (yes/no) | a horde-wide speed burst |
 | `reinforcements` | choice | which unlocked enemy type to send, chosen to counter your build |
+| `boss_pattern` | choice | the boss's next attack: nova / spiral / barrage / summon |
 
 If Jev isn't configured or a call fails, a local heuristic brain answers the same questions. The HUD panel (Tab)
 shows which brain is active and what each squad is doing. The GitHub Pages build always uses the local brain,
@@ -23,6 +25,7 @@ because static hosting can't keep an API key secret.
 
 - **WASD / arrows**: move
 - **Weapons fire automatically.** Hold the **left mouse button** to aim knives/arrows at the cursor.
+- **Space / right-click**: Blink. Teleport toward your aim, blasting enemies where you land (5s cooldown).
 - **1 / 2 / 3** or click: pick a level-up card
 - **Tab**: toggle the Horde Director panel · **O**: squad tactics overlay
 - **R / M**: retry / menu after a run
@@ -31,14 +34,20 @@ because static hosting can't keep an API key secret.
 
 - **Heroes:** Knight (knives), Elf (bow), Wizard (homing bolts), Lizard (orbiting axes)
 - **Weapons (5 levels each):** Throwing Knives, Longbow, Hex Staff, Orbit Axes, Blight Ward (aura),
-  Storm Staff (chain lightning), Quake Hammer (shockwave)
+  Storm Staff (chain lightning), Quake Hammer (shockwave), Inferno (fire arcs that ignite enemies, and the fire spreads),
+  Meteor Storm (telegraphed impacts that leave burning ground), and Soul Bind (possess enemies to fight for you,
+  then detonate them)
 - **Passives:** Might, Vitality, Swiftness, Haste, Reach, Magnet, Armor, Regen, Duplicator
-- **Enemies:** tiny zombies, zombies, skeletons, swampies, ice zombies (their touch chills you), chorts,
-  big zombies and ogres (elites that drop chests), necromancers (summoners), and the big demon boss
+- **Stages and enemies:** The Crypt (zombies, skeletons, swampies, necromancers; boss: the Crypt Demon),
+  Frozen Catacombs (ice zombies, goblins, muddies, ogres; boss: the Frost King), and Hellforge (imps, wogols,
+  masked orcs, orc warriors, orc shamans; boss: the Demon Lord). Bosses fire novas, spirals and barrages
+  and summon minions.
 - **Drops:** XP gems, coins, flasks (heal / magnet / bomb), treasure chests, weapons lying on the floor,
   breakable crates
-- **Shaders (WGSL):** glow (bolts, gems), animated rings (aura, shockwaves, drops), flickering lightning,
-  and a screen vignette with a red hurt flash, a low-HP heartbeat, and a gold level-up bloom
+- **Shaders (WGSL):** glow (bolts, gems), animated rings (aura, shockwaves, drops), fractal lightning with
+  branches, stylized pixel fire (domain-warped fBm with banded colors), swirl portals and blink rifts, and a
+  screen vignette with a red hurt flash, a low-HP heartbeat, a gold level-up bloom, and a white-out when you
+  warp between stages
 
 ## Run it
 
@@ -57,7 +66,9 @@ cargo run -p serve -- --mock-jev                       # offline, fake Jev answe
 
 `ZS_AUTOPLAY=1` lets a bot play, pick level-ups and restart after dying. `ZS_EXIT_AFTER=<secs>` quits,
 `ZS_SCREENSHOT=<png>` saves a screenshot just before quitting, `ZS_SPEED=<x>` fast-forwards the simulation,
-and `ZS_NO_JEV=1` forces the local brain. Every 2 seconds the game logs a `[telemetry]` line
+`ZS_NO_JEV=1` forces the local brain, `ZS_GRANT=Inferno,Meteor` starts with those weapons at max level,
+`ZS_BOSS_AT=<secs>` brings each boss in early, and `ZS_ON_TOP=1` keeps the window on top so screenshots aren't
+blank. On the web, `?autoplay&nojev&grant=Inferno` does the same. Every 2 seconds the game logs a `[telemetry]` line
 (time, level, kills, HP, build, and the director's last decisions).
 
 ## Credits

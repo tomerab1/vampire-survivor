@@ -105,11 +105,11 @@ fn spawn_menu(mut commands: Commands, assets: Res<GameAssets>, options: Res<Laun
         .spawn((DespawnOnExit(AppState::Menu), centered_column(), BackgroundColor(Color::srgb(0.05, 0.04, 0.06))))
         .with_children(|root| {
             root.spawn(line(&assets.title_font, 60.0, TITLE_COLOR, "ZOMBIE SURVIVOR"));
-            root.spawn(line(&assets.pixel_font, 28.0, BODY_COLOR, "Survive 15 minutes. Level up. Pick your build."));
+            root.spawn(line(&assets.pixel_font, 28.0, BODY_COLOR, "Slay each stage's boss, take the portal, conquer Hellforge."));
             root.spawn(line(&assets.mono_font, 16.0, DIM_COLOR, brain));
             root.spawn(Node { column_gap: Val::Px(18.0), margin: UiRect::vertical(Val::Px(12.0)), ..default() }).add_children(&cards);
             root.spawn(line(&assets.title_font, 24.0, GOLD, "ENTER TO START"));
-            root.spawn(line(&assets.pixel_font, 22.0, DIM_COLOR, "1-4 or click to choose a hero · WASD move · hold mouse to aim"));
+            root.spawn(line(&assets.pixel_font, 22.0, DIM_COLOR, "1-4 or click a hero · WASD move · hold mouse to aim · SPACE blink"));
         });
 }
 
@@ -178,7 +178,7 @@ fn spawn_end_screen(mut commands: Commands, assets: Res<GameAssets>, run: Res<Ru
         BackgroundColor(OVERLAY),
         GlobalZIndex(20),
         children![
-            line(&assets.title_font, 60.0, if won { GOLD } else { TITLE_COLOR }, if won { "YOU SURVIVED" } else { "YOU WERE EATEN" }),
+            line(&assets.title_font, 60.0, if won { GOLD } else { TITLE_COLOR }, if won { "THE DEMON LORD FALLS" } else { "YOU WERE EATEN" }),
             line(
                 &assets.pixel_font,
                 32.0,

@@ -43,12 +43,6 @@ pub struct RunStats {
     pending_levels: u32,
 }
 
-impl RunStats {
-    pub fn minute(&self) -> u32 {
-        (self.elapsed / 60.0) as u32
-    }
-}
-
 #[derive(Message)]
 pub struct GainXp(pub u32);
 
@@ -80,11 +74,8 @@ fn reset_run(mut run: ResMut<RunStats>, mut phase: ResMut<NextState<Phase>>) {
     phase.set(Phase::Running);
 }
 
-fn tick_clock(time: Res<Time>, mut run: ResMut<RunStats>, mut next: ResMut<NextState<AppState>>) {
+fn tick_clock(time: Res<Time>, mut run: ResMut<RunStats>) {
     run.elapsed += time.delta_secs();
-    if run.elapsed >= RUN_LENGTH_SECS {
-        next.set(AppState::Victory);
-    }
 }
 
 fn count_kills(mut killed: MessageReader<EnemyKilled>, mut run: ResMut<RunStats>) {

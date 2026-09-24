@@ -10,6 +10,7 @@ use crate::assets::GameAssets;
 use crate::config::*;
 use crate::hero::Player;
 use crate::rng::Rng;
+use crate::stage::{STAGES, StageDef};
 use crate::{AppState, GameSet};
 
 pub struct WorldPlugin;
@@ -169,12 +170,12 @@ fn pixel_transform(pos: Vec2, z: f32) -> Transform {
     Transform::from_translation(pos.extend(z)).with_scale(Vec3::splat(PIXEL_SCALE))
 }
 
-fn spawn_arena(
-    mut commands: Commands,
-    assets: Res<GameAssets>,
-    mut rng: ResMut<Rng>,
-    mut obstacles: ResMut<Obstacles>,
-) {
+fn spawn_arena(mut commands: Commands, assets: Res<GameAssets>, mut rng: ResMut<Rng>, mut obstacles: ResMut<Obstacles>) {
+    build_arena(&mut commands, &assets, &mut rng, &mut obstacles, &STAGES[0]);
+}
+
+/// Lays out one stage's map: tinted floor and walls, pillars, crates and decor.
+pub fn build_arena(commands: &mut Commands, assets: &GameAssets, rng: &mut Rng, obstacles: &mut Obstacles, stage: &StageDef) {
     let tiled = SpriteImageMode::Tiled { tile_x: true, tile_y: true, stretch_value: 1.0 };
     commands.spawn((
         Gameplay,
@@ -182,11 +183,12 @@ fn spawn_arena(
             image: assets.img("floor_big"),
             custom_size: Some(Vec2::splat(ARENA_HALF * 2.0 / PIXEL_SCALE)),
             image_mode: tiled.clone(),
+            color: stage.floor_tint,
             ..default()
         },
         pixel_transform(Vec2::ZERO, Z_FLOOR),
     ));
-    spawn_walls(&mut commands, &assets, &tiled);
+    spawn_walls(commands, assets, &tiled, stage.prop_tint);
 
     obstacles.0.clear();
     let place = |rng: &mut Rng, obstacles: &Obstacles, radius: f32| loop {
@@ -200,12 +202,12 @@ fn spawn_arena(
     const COLUMN_RADIUS: f32 = 22.0;
     const COLUMN_LIFT: f32 = 60.0;
     for _ in 0..COLUMN_COUNT {
-        let base = place(&mut rng, &obstacles, COLUMN_RADIUS);
+        let base = place(rng, obstacles, COLUMN_RADIUS);
         obstacles.0.push(Obstacle { center: base, radius: COLUMN_RADIUS, entity: None });
         commands.spawn((
             Gameplay,
             YSort { feet: -COLUMN_LIFT },
-            Sprite::from_image(assets.img("column")),
+            Sprite { image: assets.img("column"), color: stage.prop_tint, ..default() },
             pixel_transform(base + Vec2::Y * COLUMN_LIFT, Z_ACTORS),
         ));
     }
@@ -213,7 +215,7 @@ fn spawn_arena(
     const CRATE_RADIUS: f32 = 22.0;
     const CRATE_LIFT: f32 = 18.0;
     for _ in 0..CRATE_COUNT {
-        let base = place(&mut rng, &obstacles, CRATE_RADIUS);
+        let base = place(rng, obstacles, CRATE_RADIUS);
         let entity = commands
             .spawn((
                 Gameplay,
@@ -228,12 +230,16 @@ fn spawn_arena(
 
     let decor = ["skull", "hole"];
     for i in 0..DECOR_COUNT {
-        let pos = random_point(&mut rng, ARENA_HALF - 60.0);
-        commands.spawn((Gameplay, Sprite::from_image(assets.img(decor[i % decor.len()])), pixel_transform(pos, Z_DECOR)));
+        let pos = random_point(rng, ARENA_HALF - 60.0);
+        commands.spawn((
+            Gameplay,
+            Sprite { image: assets.img(decor[i % decor.len()]), color: stage.prop_tint, ..default() },
+            pixel_transform(pos, Z_DECOR),
+        ));
     }
 }
 
-fn spawn_walls(commands: &mut Commands, assets: &GameAssets, tiled: &SpriteImageMode) {
+fn spawn_walls(commands: &mut Commands, assets: &GameAssets, tiled: &SpriteImageMode, tint: Color) {
     const WALL_PX: f32 = 16.0;
     let thickness = WALL_PX * PIXEL_SCALE;
     let span = (ARENA_HALF * 2.0 + thickness * 2.0) / PIXEL_SCALE;
@@ -246,7 +252,7 @@ fn spawn_walls(commands: &mut Commands, assets: &GameAssets, tiled: &SpriteImage
     ] {
         commands.spawn((
             Gameplay,
-            Sprite { image: assets.img(image), custom_size: Some(size), image_mode: tiled.clone(), ..default() },
+            Sprite { image: assets.img(image), custom_size: Some(size), image_mode: tiled.clone(), color: tint, ..default() },
             pixel_transform(pos, Z_DECOR),
         ));
     }

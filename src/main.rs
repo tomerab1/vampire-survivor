@@ -2,6 +2,7 @@
 
 mod anim;
 mod assets;
+mod blink;
 mod config;
 mod director;
 mod effects;
@@ -13,11 +14,13 @@ mod pickups;
 mod progression;
 mod rng;
 mod screens;
+mod specials;
+mod stage;
 mod weapons;
 mod world;
 
 use bevy::prelude::*;
-use bevy::window::WindowResolution;
+use bevy::window::{WindowLevel, WindowResolution};
 
 use config::{WINDOW_HEIGHT, WINDOW_TITLE, WINDOW_WIDTH};
 
@@ -62,6 +65,8 @@ fn main() {
                         canvas: Some("#game".into()),
                         fit_canvas_to_parent: true,
                         prevent_default_event_handling: true,
+                        // Verification runs keep the window on top so screenshots aren't blank when occluded.
+                        window_level: if options.on_top { WindowLevel::AlwaysOnTop } else { WindowLevel::Normal },
                         ..default()
                     }),
                     ..default()
@@ -93,6 +98,8 @@ fn main() {
             world::WorldPlugin,
             hero::HeroPlugin,
             weapons::WeaponsPlugin,
+            specials::SpecialsPlugin,
+            blink::BlinkPlugin,
             enemies::EnemiesPlugin,
             pickups::PickupsPlugin,
             progression::ProgressionPlugin,
@@ -101,5 +108,6 @@ fn main() {
             screens::ScreensPlugin,
             launch::LaunchPlugin,
         ))
+        .add_plugins(stage::StagePlugin)
         .run();
 }

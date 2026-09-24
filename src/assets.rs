@@ -19,15 +19,27 @@ impl Plugin for AssetsPlugin {
 }
 
 #[derive(Component)]
-struct Ambience;
+pub struct Ambience;
 
-/// Looping cave ambience for the whole session. The source is mastered quiet (~-31 dB mean),
-/// so it is amplified rather than attenuated.
+/// The ambience loops are mastered quiet (~-31 dB mean), so they're amplified rather than attenuated.
+const AMBIENCE_VOLUME: f32 = 2.5;
+
 fn start_ambience(mut commands: Commands, assets: Res<GameAssets>) {
-    const AMBIENCE_VOLUME: f32 = 2.5;
     commands.spawn((
         Ambience,
         AudioPlayer(assets.ambience.clone()),
+        PlaybackSettings::LOOP.with_volume(Volume::Linear(AMBIENCE_VOLUME)),
+    ));
+}
+
+/// Replace whatever ambience is playing with the loop at `path`.
+pub fn swap_ambience(commands: &mut Commands, server: &AssetServer, existing: &Query<Entity, With<Ambience>>, path: &'static str) {
+    for entity in existing {
+        commands.entity(entity).try_despawn();
+    }
+    commands.spawn((
+        Ambience,
+        AudioPlayer::<AudioSource>(server.load(path)),
         PlaybackSettings::LOOP.with_volume(Volume::Linear(AMBIENCE_VOLUME)),
     ));
 }
@@ -82,6 +94,13 @@ const ANIMATIONS: &[(&str, usize)] = &[
     ("big_demon_run_anim", 4),
     ("coin_anim", 4),
     ("chest_full_open_anim", 3),
+    ("goblin_run_anim", 4),
+    ("muddy_anim", 4),
+    ("imp_run_anim", 4),
+    ("wogol_run_anim", 4),
+    ("masked_orc_run_anim", 4),
+    ("orc_warrior_run_anim", 4),
+    ("orc_shaman_run_anim", 4),
 ];
 
 /// Single-frame images: `dungeon/{name}.png`.
@@ -110,6 +129,10 @@ const IMAGES: &[&str] = &[
     "flask_big_green",
     "flask_big_yellow",
     "ui_heart_full",
+    "icon_inferno",
+    "icon_meteor",
+    "icon_soul",
+    "icon_blink",
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -130,11 +153,16 @@ pub enum Sfx {
     Boss,
     Select,
     Bomb,
+    Portal,
+    Flame,
+    Meteor,
+    Blink,
+    Soul,
 }
 
 impl Sfx {
     /// (effect, file stem, variant count, volume). Files are `sounds/{stem}_{n}.ogg`, n from 1.
-    const ALL: [(Sfx, &'static str, usize, f32); 16] = [
+    const ALL: [(Sfx, &'static str, usize, f32); 21] = [
         (Sfx::Swing, "swing", 3, 0.35),
         (Sfx::Bow, "bow", 2, 0.4),
         (Sfx::Magic, "magic", 2, 0.3),
@@ -151,6 +179,11 @@ impl Sfx {
         (Sfx::Boss, "boss", 1, 0.9),
         (Sfx::Select, "select", 1, 0.6),
         (Sfx::Bomb, "bomb", 1, 0.8),
+        (Sfx::Portal, "portal", 1, 0.9),
+        (Sfx::Flame, "flame", 1, 0.35),
+        (Sfx::Meteor, "meteor", 1, 0.5),
+        (Sfx::Blink, "blink", 1, 0.6),
+        (Sfx::Soul, "soul", 1, 0.6),
     ];
 }
 

@@ -18,9 +18,10 @@ use bevy::prelude::*;
 use crate::config::*;
 use crate::launch::LaunchOptions;
 use crate::anim::Motion;
-use crate::enemies::{Enemy, EnemyKind};
+use crate::enemies::{BossPattern, Enemy, EnemyKind, Possessed, Role};
 use crate::hero::{Health, Loadout, Player};
 use crate::progression::RunStats;
+use crate::stage::Stage;
 use crate::{AppState, GameSet};
 
 pub struct DirectorPlugin;
@@ -106,6 +107,7 @@ pub struct HordeOrders {
     pub pressure: u8,
     pub enraged: bool,
     pub reinforcement: Option<EnemyKind>,
+    pub boss_pattern: Option<BossPattern>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -168,7 +170,11 @@ pub struct SquadReport {
 /// Everything the director knows when it asks for decisions.
 #[derive(Clone)]
 pub struct Snapshot {
+    pub stage: usize,
+    pub stage_name: &'static str,
     pub minute: u32,
+    /// (hp fraction, distance) of the live boss, if any.
+    pub boss: Option<(f32, f32)>,
     pub level: u32,
     pub kills: u32,
     pub survivor_pos: Vec2,
@@ -195,6 +201,7 @@ pub struct Decision {
     pub pressure: u8,
     pub enrage: bool,
     pub reinforcement: Option<EnemyKind>,
+    pub boss_pattern: Option<BossPattern>,
 }
 
 fn describe_backend(options: Res<LaunchOptions>, mut status: ResMut<DirectorStatus>) {
@@ -216,8 +223,9 @@ fn reset_orders(mut orders: ResMut<HordeOrders>, mut link: ResMut<jev::JevLink>)
 
 fn take_snapshot(
     run: &RunStats,
+    stage: &Stage,
     player: (&Transform, &Motion, &Health, &Loadout),
-    enemies: &Query<(&Enemy, &Transform), Without<Player>>,
+    enemies: &Query<(&Enemy, &Transform), (Without<Player>, Without<Possessed>)>,
 ) -> Snapshot {
     let (transform, motion, health, loadout) = player;
     let pos = transform.translation.truncate();
@@ -225,8 +233,12 @@ fn take_snapshot(
         .map(|sector| Squad { sector, count: 0, kinds: Vec::new(), centroid: Vec2::ZERO, distance: 0.0, health_pct: 0.0 })
         .collect();
 
+    let mut boss = None;
     for (enemy, et) in enemies {
         let ep = et.translation.truncate();
+        if enemy.kind.def().role == Role::Boss {
+            boss = Some((enemy.hp / enemy.max_hp, ep.distance(pos)));
+        }
         let squad = &mut squads[sector_of(pos, ep)];
         squad.count += 1;
         match squad.kinds.iter_mut().find(|(k, _)| *k == enemy.kind) {
@@ -252,7 +264,10 @@ fn take_snapshot(
         .collect();
 
     Snapshot {
-        minute: run.minute(),
+        stage: stage.index + 1,
+        stage_name: stage.def().name,
+        minute: stage.minute(),
+        boss,
         level: run.level,
         kills: run.kills,
         survivor_pos: pos,
@@ -261,19 +276,20 @@ fn take_snapshot(
         survivor_max_hp: health.max,
         build,
         squads,
-        unlocked: EnemyKind::unlocked(run.minute()).collect(),
+        unlocked: stage.unlocked(),
     }
 }
 
 fn request_decisions(
     time: Res<Time>,
     run: Res<RunStats>,
+    stage: Res<Stage>,
     options: Res<LaunchOptions>,
     mut link: ResMut<jev::JevLink>,
     mut orders: ResMut<HordeOrders>,
     mut status: ResMut<DirectorStatus>,
     player: Single<(&Transform, &Motion, &Health, &Loadout), With<Player>>,
-    enemies: Query<(&Enemy, &Transform), Without<Player>>,
+    enemies: Query<(&Enemy, &Transform), (Without<Player>, Without<Possessed>)>,
 ) {
     let now = time.elapsed_secs();
     link.expire_if_stuck(now, &mut status);
@@ -281,7 +297,7 @@ fn request_decisions(
         return;
     }
     link.schedule_next(now);
-    let snapshot = take_snapshot(&run, *player, &enemies);
+    let snapshot = take_snapshot(&run, &stage, *player, &enemies);
     if snapshot.squads.is_empty() {
         return;
     }
@@ -335,6 +351,7 @@ fn apply(decision: &Decision, snapshot: &Snapshot, source: Source, orders: &mut 
     orders.pressure = decision.pressure;
     orders.enraged = decision.enrage;
     orders.reinforcement = decision.reinforcement;
+    orders.boss_pattern = decision.boss_pattern;
 
     status.source = source;
     status.squads = snapshot
@@ -348,11 +365,12 @@ fn apply(decision: &Decision, snapshot: &Snapshot, source: Source, orders: &mut 
         .map(|s| format!("{}:{}({})", SECTOR_LABELS[s.sector], s.tactic.label(), s.count))
         .collect();
     status.last_summary = format!(
-        "{} | pressure {} | enrage {} | send {}",
+        "{} | pressure {} | enrage {} | send {} | boss {}",
         squads.join(" "),
         decision.pressure,
         if decision.enrage { "yes" } else { "no" },
         decision.reinforcement.map_or("-", |k| k.def().label),
+        decision.boss_pattern.map_or("-", |p| p.label()),
     );
     info!("[director] {} decided: {}", status.source_label(), status.last_summary);
 }

@@ -39,6 +39,9 @@ pub enum WeaponKind {
     Aura,
     Lightning,
     Hammer,
+    Inferno,
+    Meteor,
+    SoulBind,
 }
 
 pub struct WeaponDef {
@@ -48,18 +51,18 @@ pub struct WeaponDef {
 }
 
 /// Per-level numbers; index 0 is level 1.
-struct Table {
-    cooldown: [f32; 5],
-    damage: [f32; 5],
-    count: [u32; 5],
-    /// Pierce for projectiles, chain jumps for lightning, unused otherwise.
-    extra: [u32; 5],
-    /// Radius for area weapons.
-    area: [f32; 5],
+pub(crate) struct Table {
+    pub cooldown: [f32; 5],
+    pub damage: [f32; 5],
+    pub count: [u32; 5],
+    /// Pierce for projectiles, chain jumps for lightning, lifetime/burn seconds for specials.
+    pub extra: [u32; 5],
+    /// Radius (or range, for Inferno) for area weapons.
+    pub area: [f32; 5],
 }
 
 impl WeaponKind {
-    pub const ALL: [WeaponKind; 7] = [
+    pub const ALL: [WeaponKind; 10] = [
         WeaponKind::Knives,
         WeaponKind::Bow,
         WeaponKind::MagicBolt,
@@ -67,7 +70,15 @@ impl WeaponKind {
         WeaponKind::Aura,
         WeaponKind::Lightning,
         WeaponKind::Hammer,
+        WeaponKind::Inferno,
+        WeaponKind::Meteor,
+        WeaponKind::SoulBind,
     ];
+
+    /// Weapons driven by `specials.rs` rather than `fire_weapons`.
+    pub fn is_special(self) -> bool {
+        matches!(self, WeaponKind::Inferno | WeaponKind::Meteor | WeaponKind::SoulBind)
+    }
 
     pub fn def(self) -> WeaponDef {
         let (name, icon, blurb) = match self {
@@ -78,11 +89,14 @@ impl WeaponKind {
             WeaponKind::Aura => ("Blight Ward", "flask_big_green", "A burning ring that damages nearby foes"),
             WeaponKind::Lightning => ("Storm Staff", "weapon_green_magic_staff", "Chain lightning strikes random foes"),
             WeaponKind::Hammer => ("Quake Hammer", "weapon_big_hammer", "Periodic shockwave that blasts foes back"),
+            WeaponKind::Inferno => ("Inferno", "icon_inferno", "Fire arcs leap to nearby foes and set them ablaze; fire spreads"),
+            WeaponKind::Meteor => ("Meteor Storm", "icon_meteor", "Meteors crash onto foes and leave burning ground"),
+            WeaponKind::SoulBind => ("Soul Bind", "icon_soul", "Possess foes to fight for you, then detonate them"),
         };
         WeaponDef { name, icon, blurb }
     }
 
-    fn table(self) -> Table {
+    pub(crate) fn table(self) -> Table {
         match self {
             WeaponKind::Knives => Table {
                 cooldown: [1.0, 0.95, 0.85, 0.75, 0.6],
@@ -133,6 +147,27 @@ impl WeaponKind {
                 extra: [0; 5],
                 area: [150.0, 170.0, 190.0, 220.0, 260.0],
             },
+            WeaponKind::Inferno => Table {
+                cooldown: [1.4, 1.3, 1.15, 1.0, 0.8],
+                damage: [14.0, 18.0, 22.0, 28.0, 36.0],
+                count: [2, 2, 3, 3, 4],
+                extra: [5, 7, 9, 12, 16],
+                area: [260.0, 290.0, 320.0, 350.0, 380.0],
+            },
+            WeaponKind::Meteor => Table {
+                cooldown: [3.5, 3.1, 2.7, 2.3, 1.8],
+                damage: [40.0, 50.0, 62.0, 75.0, 90.0],
+                count: [1, 2, 2, 3, 4],
+                extra: [2, 2, 3, 3, 4],
+                area: [85.0, 95.0, 105.0, 115.0, 130.0],
+            },
+            WeaponKind::SoulBind => Table {
+                cooldown: [8.0, 7.0, 6.0, 5.0, 4.0],
+                damage: [40.0, 55.0, 70.0, 90.0, 120.0],
+                count: [1, 1, 2, 2, 3],
+                extra: [6, 7, 8, 9, 10],
+                area: [110.0, 120.0, 130.0, 145.0, 160.0],
+            },
         }
     }
 
@@ -145,13 +180,24 @@ impl WeaponKind {
         let next = prev + 1;
         let mut parts = Vec::new();
         if now.count[next] > now.count[prev] {
-            parts.push(format!("+{} {}", now.count[next] - now.count[prev], if self == WeaponKind::Lightning { "strike" } else { "projectile" }));
+            let noun = match self {
+                WeaponKind::Lightning => "strike",
+                WeaponKind::Inferno => "fire arc",
+                WeaponKind::Meteor => "meteor",
+                WeaponKind::SoulBind => "possession",
+                _ => "projectile",
+            };
+            parts.push(format!("+{} {noun}", now.count[next] - now.count[prev]));
         }
         if now.damage[next] > now.damage[prev] {
             parts.push(format!("+{:.0} damage", now.damage[next] - now.damage[prev]));
         }
         if now.extra[next] > now.extra[prev] {
-            parts.push(if self == WeaponKind::Lightning { "+chain".to_string() } else { "+pierce".to_string() });
+            parts.push(match self {
+                WeaponKind::Lightning => "+chain".to_string(),
+                k if k.is_special() => "+duration".to_string(),
+                _ => "+pierce".to_string(),
+            });
         }
         if now.area[next] > now.area[prev] {
             parts.push("+area".to_string());
@@ -195,7 +241,7 @@ struct AuraFx {
 struct Timers(HashMap<WeaponKind, f32>);
 
 /// Where aimed weapons should shoot: the held cursor, else the nearest foe, else facing.
-fn aim_direction(pos: Vec2, intent: &Intent, grid: &EnemyGrid) -> Vec2 {
+pub(crate) fn aim_direction(pos: Vec2, intent: &Intent, grid: &EnemyGrid) -> Vec2 {
     const AUTO_AIM_RANGE: f32 = 700.0;
     intent
         .aim
@@ -232,7 +278,7 @@ fn fire_weapons(
         let i = (level.clamp(1, MAX_LEVEL) - 1) as usize;
         let timer = timers.0.entry(kind).or_insert(0.0);
         *timer -= dt;
-        if *timer > 0.0 || matches!(kind, WeaponKind::Axes | WeaponKind::Aura) {
+        if *timer > 0.0 || kind.is_special() || matches!(kind, WeaponKind::Axes | WeaponKind::Aura) {
             continue;
         }
         *timer = t.cooldown[i] * stats.cooldown;
@@ -339,7 +385,7 @@ fn fire_weapons(
                 }
                 sfx.write(PlaySfx(Sfx::Slam));
             }
-            WeaponKind::Axes | WeaponKind::Aura => {}
+            _ => {}
         }
     }
 }

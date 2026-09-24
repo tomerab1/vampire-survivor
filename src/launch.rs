@@ -9,6 +9,7 @@ use crate::director::DirectorStatus;
 use crate::enemies::Enemy;
 use crate::hero::{Health, Loadout, Player};
 use crate::progression::RunStats;
+use crate::stage::Stage;
 
 const TELEMETRY_INTERVAL_SECS: f32 = 2.0;
 #[cfg(not(target_arch = "wasm32"))]
@@ -31,6 +32,10 @@ pub struct LaunchOptions {
     pub speed: f32,
     /// Extra starting weapons for testing (native `ZS_GRANT=Lightning,Aura`).
     pub grant: Vec<String>,
+    /// Keep the native window above others (`ZS_ON_TOP`), for screenshots.
+    pub on_top: bool,
+    /// Seconds into each stage the boss appears (native `ZS_BOSS_AT`), for fast verification.
+    pub boss_at: f32,
     /// Jev endpoint root; `None` disables Jev and uses the local fallback brain.
     pub jev_base_url: Option<String>,
     pub jev_api_key: Option<String>,
@@ -62,6 +67,8 @@ impl LaunchOptions {
             screenshot: env("ZS_SCREENSHOT"),
             seed: env("ZS_SEED").and_then(|v| v.parse().ok()).unwrap_or(seed),
             speed: env("ZS_SPEED").and_then(|v| v.parse().ok()).unwrap_or(1.0),
+            on_top: flag("ZS_ON_TOP"),
+            boss_at: env("ZS_BOSS_AT").and_then(|v| v.parse().ok()).unwrap_or(crate::config::BOSS_AT_SECS),
             grant: env("ZS_GRANT").map(|v| v.split(',').map(str::to_string).collect()).unwrap_or_default(),
             jev_base_url: jev_disabled_reason
                 .is_none()
@@ -95,6 +102,8 @@ impl LaunchOptions {
             skip_menu: has("autoplay") || has("play"),
             seed: js_sys::Date::now() as u64,
             speed: 1.0,
+            on_top: false,
+            boss_at: crate::config::BOSS_AT_SECS,
             grant: query
                 .trim_start_matches('?')
                 .split('&')
@@ -133,6 +142,7 @@ fn telemetry(
     time: Res<Time>,
     mut since: Local<f32>,
     run: Res<RunStats>,
+    stage: Res<Stage>,
     director: Res<DirectorStatus>,
     player: Single<(&Health, &Loadout), With<Player>>,
     enemies: Query<(), With<Enemy>>,
@@ -146,8 +156,9 @@ fn telemetry(
     let weapons: Vec<String> = loadout.weapons.iter().map(|(k, l)| format!("{:?}{l}", k)).collect();
     let passives: Vec<String> = loadout.passives.iter().map(|(k, l)| format!("{:?}{l}", k)).collect();
     info!(
-        "[telemetry] t={:.0}s lvl={} kills={} hp={:.0}/{:.0} alive={} weapons=[{}] passives=[{}] director={} model={} ok={} fail={} last=[{}]",
+        "[telemetry] t={:.0}s stage={} lvl={} kills={} hp={:.0}/{:.0} alive={} weapons=[{}] passives=[{}] director={} model={} ok={} fail={} last=[{}]",
         run.elapsed,
+        stage.index + 1,
         run.level,
         run.kills,
         health.current,

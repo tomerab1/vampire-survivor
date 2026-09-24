@@ -11,7 +11,7 @@ use serde_json::{Map, Value, json};
 use super::{Decision, SECTOR_LABELS, Snapshot, Tactic};
 use crate::config::*;
 use crate::director::DirectorStatus;
-use crate::enemies::EnemyKind;
+use crate::enemies::{BossPattern, EnemyKind};
 
 const BACKOFF_AFTER_FAILURES: u32 = 3;
 const BACKOFF_SECS: f32 = 15.0;
@@ -24,6 +24,9 @@ const GAME_BRIEF: &str = "Vampire-Survivors-style horde game. You are the direct
 The lone survivor auto-fires weapons (listed in their build) and levels up as they kill; your goal is to reach and \
 overwhelm them before the 15 minute timer runs out. Coordinates are pixels, +x is east, +y is north. Squads are named \
 by the side of the survivor they are on.";
+
+const BOSS_TASK: &str = "The horde's boss is on the field. Which attack pattern should it use next to hurt the survivor, \
+given how far away they are, how they are moving and how healthy the boss still is?";
 
 const REINFORCE_TASK: &str = "Which enemy type should the horde send as reinforcements over the next few seconds? \
 Counter the survivor's current build: e.g. fast units against slow single-target builds, tanky units against \
@@ -201,6 +204,11 @@ pub fn build_request(snapshot: &Snapshot) -> Value {
     questions.insert("enrage".into(), json!({ "type": "noul", "instructions": ENRAGE_TASK }));
     let reinforcements: Map<String, Value> =
         snapshot.unlocked.iter().map(|k| (k.def().label.to_string(), Value::from(k.def().pitch))).collect();
+    if snapshot.boss.is_some() {
+        let patterns: Map<String, Value> =
+            BossPattern::ALL.iter().map(|p| (p.label().to_string(), Value::from(p.description()))).collect();
+        questions.insert("boss_pattern".into(), json!({ "type": "choice", "instructions": BOSS_TASK, "criteria": patterns }));
+    }
     if reinforcements.len() > 1 {
         questions.insert(
             "reinforcements".into(),
@@ -212,7 +220,8 @@ pub fn build_request(snapshot: &Snapshot) -> Value {
         "model": JEV_MODEL,
         "state": {
             "game": GAME_BRIEF,
-            "minute": snapshot.minute,
+            "stage": { "number": snapshot.stage, "name": snapshot.stage_name, "minute": snapshot.minute },
+            "boss": snapshot.boss.map(|(hp, dist)| json!({ "health_pct": (hp * 100.0).round(), "distance_px": dist.round() })),
             "survivor": {
                 "position": round(snapshot.survivor_pos),
                 "velocity": round(snapshot.survivor_vel),
@@ -256,8 +265,14 @@ fn parse_reply(body: &Value, snapshot: &Snapshot, latency_ms: u32) -> Result<Rep
         .and_then(Value::as_str)
         .and_then(EnemyKind::from_label);
 
+    let boss_pattern = answers
+        .get("boss_pattern")
+        .and_then(|a| a.get("choice"))
+        .and_then(Value::as_str)
+        .and_then(BossPattern::from_label);
+
     Ok(Reply {
-        decision: Decision { tactics, pressure, enrage, reinforcement },
+        decision: Decision { tactics, pressure, enrage, reinforcement, boss_pattern },
         model: body.get("model").and_then(Value::as_str).unwrap_or(JEV_MODEL).to_string(),
         latency_ms,
         input_tokens: body.pointer("/usage/input_tokens").and_then(Value::as_u64).unwrap_or(0),

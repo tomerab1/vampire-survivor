@@ -22,10 +22,12 @@ impl Plugin for EffectsPlugin {
             Material2dPlugin::<RingMaterial>::default(),
             Material2dPlugin::<BoltMaterial>::default(),
             Material2dPlugin::<VignetteMaterial>::default(),
+            Material2dPlugin::<FireMaterial>::default(),
+            Material2dPlugin::<SwirlMaterial>::default(),
         ))
         .init_resource::<ScreenFx>()
-        .add_systems(Startup, (init_fx_meshes, spawn_vignette).chain())
-        .add_systems(Update, (update_rings, update_bolts, update_flashes, update_particles, update_float_text).in_set(GameSet::Presentation))
+        .add_systems(Startup, (init_fx_meshes, init_fx_materials, spawn_vignette).chain())
+        .add_systems(Update, (update_rings, update_bolts, update_flashes, update_swirls, update_particles, update_float_text).in_set(GameSet::Presentation))
         .add_systems(PostUpdate, update_vignette);
     }
 }
@@ -57,6 +59,87 @@ fx_material!(GlowMaterial, "shaders/glow.wgsl");
 fx_material!(RingMaterial, "shaders/ring.wgsl");
 fx_material!(BoltMaterial, "shaders/bolt.wgsl");
 fx_material!(VignetteMaterial, "shaders/vignette.wgsl");
+fx_material!(FireMaterial, "shaders/fire.wgsl");
+fx_material!(SwirlMaterial, "shaders/swirl.wgsl");
+
+/// Materials shared by many short-lived entities, so they batch instead of
+/// allocating one material each. Per-instance fades use their own materials.
+#[derive(Resource)]
+pub struct FxMaterials {
+    pub flame: Handle<FireMaterial>,
+    pub ground_fire: Handle<FireMaterial>,
+    pub meteor: Handle<FireMaterial>,
+    pub portal: Handle<SwirlMaterial>,
+    pub possessed: Handle<GlowMaterial>,
+}
+
+fn init_fx_materials(
+    mut commands: Commands,
+    mut fire: ResMut<Assets<FireMaterial>>,
+    mut swirl: ResMut<Assets<SwirlMaterial>>,
+    mut glow: ResMut<Assets<GlowMaterial>>,
+) {
+    let fire_mat = |shape: f32, speed: f32, scale: f32| FireMaterial { color: LinearRgba::WHITE, params: Vec4::new(speed, scale, shape, 0.0) };
+    commands.insert_resource(FxMaterials {
+        flame: fire.add(fire_mat(0.0, 1.6, 2.2)),
+        ground_fire: fire.add(FireMaterial { color: LinearRgba::new(1.0, 1.0, 1.0, 0.8), params: Vec4::new(1.2, 2.6, 1.0, 0.0) }),
+        meteor: fire.add(fire_mat(2.0, 3.0, 2.4)),
+        portal: swirl.add(SwirlMaterial {
+            color: Color::srgba(0.65, 0.35, 1.0, 0.95).to_linear(),
+            params: Vec4::new(5.0, 7.0, 3.0, 1.2),
+        }),
+        possessed: glow.add(GlowMaterial {
+            color: Color::srgba(0.7, 0.3, 1.0, 0.8).to_linear(),
+            params: Vec4::new(8.0, 1.6, 0.15, 0.0),
+        }),
+    });
+}
+
+/// A swirl that opens, spins and fades out (blink rifts).
+#[derive(Component)]
+pub struct SwirlFx {
+    pub age: f32,
+    pub duration: f32,
+    pub size: f32,
+}
+
+pub fn spawn_rift(
+    commands: &mut Commands,
+    meshes: &FxMeshes,
+    materials: &mut Assets<SwirlMaterial>,
+    pos: Vec2,
+    color: Color,
+    size: f32,
+) {
+    commands.spawn((
+        Gameplay,
+        SwirlFx { age: 0.0, duration: 0.55, size },
+        Mesh2d(meshes.quad.clone()),
+        MeshMaterial2d(materials.add(SwirlMaterial { color: color.to_linear(), params: Vec4::new(3.0, 10.0, 14.0, 1.4) })),
+        Transform::from_translation(pos.extend(Z_OVERHEAD_FX)).with_scale(Vec3::splat(size * 0.3)),
+    ));
+}
+
+fn update_swirls(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut swirls: Query<(Entity, &mut SwirlFx, &mut Transform, &MeshMaterial2d<SwirlMaterial>)>,
+    mut materials: ResMut<Assets<SwirlMaterial>>,
+) {
+    for (entity, mut fx, mut transform, material) in &mut swirls {
+        fx.age += time.delta_secs();
+        let t = fx.age / fx.duration;
+        if t >= 1.0 {
+            commands.entity(entity).try_despawn();
+            continue;
+        }
+        let open = (t * 4.0).min(1.0);
+        transform.scale = Vec3::splat(fx.size * (0.3 + 0.7 * open));
+        if let Some(mut m) = materials.get_mut(&material.0) {
+            m.color.alpha = 1.0 - t * t;
+        }
+    }
+}
 
 /// Shared unit meshes; scale them with `Transform`.
 #[derive(Resource)]
@@ -69,6 +152,8 @@ pub struct FxMeshes {
 #[derive(Resource, Default)]
 pub struct ScreenFx {
     pub hurt: f32,
+    /// White-out used when warping between stages.
+    pub warp: f32,
     pub levelup: f32,
     pub low_hp: f32,
 }
@@ -141,16 +226,19 @@ fn update_vignette(
 ) {
     const HURT_DECAY: f32 = 3.0;
     const LEVELUP_DECAY: f32 = 1.2;
+    const WARP_DECAY: f32 = 0.8;
     let dt = time.delta_secs();
     fx.hurt = (fx.hurt - dt * HURT_DECAY).max(0.0);
     fx.levelup = (fx.levelup - dt * LEVELUP_DECAY).max(0.0);
+    fx.warp = (fx.warp - dt * WARP_DECAY).max(0.0);
 
     let (mut transform, material) = vignette.into_inner();
     let size = window.size();
     transform.translation = camera.translation.truncate().extend(Z_VIGNETTE);
     transform.scale = size.extend(1.0);
     if let Some(mut material) = materials.get_mut(&material.0) {
-        material.params = Vec4::new(fx.hurt, fx.low_hp, fx.levelup, size.x / size.y.max(1.0));
+        material.params = Vec4::new(fx.hurt, fx.low_hp, fx.levelup.max(fx.warp), size.x / size.y.max(1.0));
+        material.color = LinearRgba::new(fx.warp, fx.warp, fx.warp, 0.55 + fx.warp * 0.45);
     }
 }
 
@@ -185,9 +273,24 @@ pub fn spawn_ring_burst(
     to: f32,
     duration: f32,
 ) {
+    spawn_ring(commands, meshes, materials, pos, color, 10.0, to, duration);
+}
+
+/// A ring animating its radius from `from` to `to` (shrinking rings make impact warnings).
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_ring(
+    commands: &mut Commands,
+    meshes: &FxMeshes,
+    materials: &mut Assets<RingMaterial>,
+    pos: Vec2,
+    color: Color,
+    from: f32,
+    to: f32,
+    duration: f32,
+) {
     commands.spawn((
         Gameplay,
-        RingFx { age: 0.0, duration, from: 10.0, to },
+        RingFx { age: 0.0, duration, from, to },
         Mesh2d(meshes.quad.clone()),
         MeshMaterial2d(materials.add(ring_material(color, 0.82, 4.0, 0.12))),
         Transform::from_translation(pos.extend(Z_GROUND_FX)).with_scale(Vec3::splat(20.0)),

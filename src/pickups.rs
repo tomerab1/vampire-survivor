@@ -144,7 +144,7 @@ fn drop_loot(
     let mut spawner = LootSpawner { commands: &mut commands, assets: &assets, meshes: &meshes, gems: &gems, rings: &mut rings };
     for kill in killed.read() {
         let def = kill.kind.def();
-        spawner.spawn(Loot::Gem(def.xp), kill.pos);
+        spawner.spawn(Loot::Gem(def.xp * kill.xp_mult), kill.pos);
         let scatter = |rng: &mut Rng| kill.pos + random_point(rng, 30.0);
         if rng.chance(COIN_DROP_CHANCE) {
             spawner.spawn(Loot::Coin, scatter(&mut rng));

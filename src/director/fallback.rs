@@ -2,7 +2,7 @@
 //! unconfigured, backing off after failures, or a request fails.
 
 use super::{Decision, Snapshot, Tactic};
-use crate::enemies::{EnemyKind, Role};
+use crate::enemies::{BossPattern, EnemyKind, Role};
 
 const BIG_SQUAD: usize = 5;
 const FAR_PX: f32 = 380.0;
@@ -48,5 +48,13 @@ pub fn decide(snapshot: &Snapshot) -> Decision {
         Some(EnemyKind::TinyZombie)
     };
 
-    Decision { tactics, pressure, enrage, reinforcement }
+    // Boss: barrage a kiting survivor, nova one that stands close, summon when hurt.
+    let boss_pattern = snapshot.boss.map(|(boss_hp, dist)| match () {
+        _ if boss_hp < 0.4 && snapshot.squads.len() < 3 => BossPattern::Summon,
+        _ if dist > 350.0 => BossPattern::Barrage,
+        _ if dist < 180.0 => BossPattern::Nova,
+        _ => BossPattern::Spiral,
+    });
+
+    Decision { tactics, pressure, enrage, reinforcement, boss_pattern }
 }

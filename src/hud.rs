@@ -9,7 +9,10 @@ use crate::config::SQUAD_SECTORS;
 use crate::director::{DirectorStatus, HordeOrders, SECTOR_LABELS, Source};
 use crate::enemies::{Enemy, Role};
 use crate::hero::{Loadout, Player};
+use crate::blink::Blink;
+use crate::config::BLINK_COOLDOWN;
 use crate::progression::RunStats;
+use crate::stage::{Banner, Stage};
 use crate::world::Gameplay;
 use crate::{AppState, GameSet};
 
@@ -34,7 +37,8 @@ impl Plugin for HudPlugin {
             .add_systems(Update, toggle_director.run_if(in_state(AppState::Playing)))
             .add_systems(
                 Update,
-                (update_top_bar, update_inventory, update_boss_bar, update_director_panel, draw_overlay).in_set(GameSet::Presentation),
+                (update_top_bar, update_inventory, update_boss_bar, update_director_panel, draw_overlay, update_banner, update_blink)
+                    .in_set(GameSet::Presentation),
             );
     }
 }
@@ -63,6 +67,15 @@ struct Inventory;
 
 #[derive(Component)]
 struct BossBar;
+
+#[derive(Component)]
+struct BannerText;
+
+#[derive(Component)]
+struct BlinkFill;
+
+#[derive(Component)]
+struct BlinkLabel;
 
 #[derive(Component)]
 struct BossFill;
@@ -166,12 +179,63 @@ fn spawn_hud(mut commands: Commands, assets: Res<GameAssets>) {
     commands.spawn((
         Gameplay,
         Node { position_type: PositionType::Absolute, bottom: Val::Px(6.0), left: Val::Px(10.0), ..default() },
-        children![text(pixel, 20.0, TEXT_DIM, "WASD move · hold mouse to aim · Tab director panel · O squad overlay")],
+        children![text(pixel, 20.0, TEXT_DIM, "WASD move · hold mouse to aim · SPACE / right-click blink · Tab director · O overlay")],
     ));
+
+    commands.spawn((
+        Gameplay,
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            top: Val::Percent(24.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        children![(BannerText, text(title, 40.0, GOLD, ""), TextLayout::justify(Justify::Center))],
+    ));
+
+    commands.spawn((
+        Gameplay,
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(34.0),
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            row_gap: Val::Px(3.0),
+            ..default()
+        },
+        children![
+            (BlinkLabel, text(pixel, 20.0, TEXT_MAIN, "BLINK")),
+            (
+                Node { width: Val::Px(140.0), height: Val::Px(8.0), ..default() },
+                BackgroundColor(Color::srgb(0.1, 0.12, 0.2)),
+                children![(BlinkFill, Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.5, 0.75, 1.0)))],
+            ),
+        ],
+    ));
+}
+
+fn update_banner(banner: Res<Banner>, mut text: Single<(&mut Text, &mut TextColor), With<BannerText>>) {
+    const FADE_SECS: f32 = 0.8;
+    text.0.0 = if banner.remaining > 0.0 { banner.text.clone() } else { String::new() };
+    text.1.0 = GOLD.with_alpha((banner.remaining / FADE_SECS).min(1.0));
+}
+
+fn update_blink(
+    player: Single<&Blink, With<Player>>,
+    mut fill: Single<&mut Node, With<BlinkFill>>,
+    mut label: Single<(&mut Text, &mut TextColor), With<BlinkLabel>>,
+) {
+    let ready = player.cooldown <= 0.0;
+    fill.width = Val::Percent((1.0 - player.cooldown / BLINK_COOLDOWN).clamp(0.0, 1.0) * 100.0);
+    label.0.0 = if ready { "BLINK READY [SPACE]".to_string() } else { format!("BLINK {:.1}s", player.cooldown) };
+    label.1.0 = if ready { Color::srgb(0.6, 0.85, 1.0) } else { TEXT_DIM };
 }
 
 fn update_top_bar(
     run: Res<RunStats>,
+    stage: Res<Stage>,
     mut xp: Single<&mut Node, With<XpFill>>,
     mut level: Single<&mut Text, (With<LevelText>, Without<ClockText>, Without<StatsText>)>,
     mut clock: Single<&mut Text, (With<ClockText>, Without<StatsText>)>,
@@ -181,7 +245,7 @@ fn update_top_bar(
     level.0 = format!("LV {}", run.level);
     let secs = run.elapsed as u32;
     clock.0 = format!("{:02}:{:02}", secs / 60, secs % 60);
-    stats.0 = format!("{} kills   {} gold", run.kills, run.gold);
+    stats.0 = format!("STAGE {} · {}   ·   {} kills   {} gold", stage.index + 1, stage.def().name, run.kills, run.gold);
 }
 
 /// Rebuilds the weapon/passive icon rows whenever the loadout changes.

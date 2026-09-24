@@ -8,9 +8,9 @@ pub const WINDOW_HEIGHT: u32 = 720;
 pub const BACKGROUND: Color = Color::srgb(0.05, 0.04, 0.06);
 pub const PIXEL_SCALE: f32 = 3.0;
 
-// Run
-pub const RUN_LENGTH_SECS: f32 = 15.0 * 60.0;
-pub const BOSS_MINUTES: [u32; 2] = [5, 10];
+// Run: each stage's boss arrives this far in; beating the last one wins.
+pub const BOSS_AT_SECS: f32 = 240.0;
+pub const BLINK_COOLDOWN: f32 = 5.0;
 
 // Arena
 pub const ARENA_HALF: f32 = 2200.0;
